@@ -495,8 +495,8 @@ def create_food_item():
                 f.write(content)
 
     # ===== Reset Fields =====
-    entries_to_clear = [entry_item, entry_ingame, entry_asset, entry_category, entry_weight,
-                        entry_hunger, entry_thirst, entry_unhappy, entry_foodtype, entry_eattype,
+    entries_to_clear = [entry_item, entry_ingame, entry_asset, entry_weight,
+                        entry_hunger, entry_thirst, entry_unhappy,
                         entry_carbs, entry_proteins, entry_lipids, entry_calories, entry_tags,
                         entry_days_fresh, entry_days_rotten, customsound_entry, evolved_name_entry,
                         entry_replace, entry_poison, minutes_to_cook_entry, minutes_to_burn_entry]
