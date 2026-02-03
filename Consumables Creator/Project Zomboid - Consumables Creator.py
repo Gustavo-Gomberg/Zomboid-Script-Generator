@@ -1,5 +1,6 @@
 import os
 import tkinter as tk
+from tkinter import ttk
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -34,6 +35,10 @@ root.title("Project Zomboid - Consumables Creator")
 root.geometry("820x820")
 root.resizable(False, False)
 
+# ===== Global Lists =====
+toggle_buttons = []          
+evolved_cbs_buttons = []    
+
 # ===== Scrollable Frame Setup =====
 canvas = tk.Canvas(root, bg=DARK_BG)
 canvas.pack(side="left", fill="both", expand=True)
@@ -42,6 +47,7 @@ scrollbar.pack(side="right", fill="y")
 canvas.configure(yscrollcommand=scrollbar.set)
 main_frame = tk.Frame(canvas, bg=DARK_BG)
 canvas.create_window((0,0), window=main_frame, anchor="nw")
+main_frame_window = canvas.create_window((0,0), window=main_frame, anchor="nw")
 
 def on_frame_configure(event):
     canvas.configure(scrollregion=canvas.bbox("all"))
@@ -59,6 +65,56 @@ tk.Label(main_frame,
          text="Made with ChatGPT by TehaGP for Project Zomboid Build 42.13.2",
          font=("Segoe UI", 8), bg=DARK_BG, fg="#ff5555").pack(side="top", anchor="n", pady=5)
 
+# ===== Fullscreen =====
+is_fullscreen = False
+
+def toggle_fullscreen(event=None):
+    global is_fullscreen
+    is_fullscreen = not is_fullscreen
+    root.attributes("-fullscreen", is_fullscreen)
+
+    # Update canvas scroll region
+    canvas.update_idletasks()
+    canvas.configure(scrollregion=canvas.bbox("all"))
+
+    if is_fullscreen:
+        # Center the main_frame inside the canvas
+        canvas_width = root.winfo_width()
+        content_width = main_frame.winfo_reqwidth()
+        x_offset = max((canvas_width - content_width)//2, 0)
+        canvas.coords(main_frame_window, x_offset, 0)
+    else:
+        # Restore original layout
+        canvas.coords(main_frame_window, 0, 0)
+        canvas.configure(scrollregion=canvas.bbox("all"))
+
+def exit_fullscreen(event=None):
+    global is_fullscreen
+    is_fullscreen = False
+    root.attributes("-fullscreen", False)
+    canvas.coords(main_frame_window, 0, 0)
+    canvas.configure(scrollregion=canvas.bbox("all"))
+
+root.bind("<F11>", toggle_fullscreen)
+root.bind("<Escape>", exit_fullscreen)
+
+# ===== Tooltip for Fullscreen =====
+fullscreen_label = tk.Label(
+    root,
+    text="Press F11 to toggle full screen on/off",
+    font=("Segoe UI", 8, "italic"),
+    bg=DARK_BG,
+    fg="#AAAAAA"
+)
+fullscreen_label.place(relx=1.0, y=5, x=-20, anchor="ne")
+
+# ===== Exit Fullscreen =====
+def exit_fullscreen(event=None):
+    root.attributes('-fullscreen', False)
+    root.state('normal')
+
+root.bind("<Escape>", exit_fullscreen)
+
 # ===== Input Fields =====
 fields_wrapper = tk.Frame(main_frame, bg=DARK_BG)
 fields_wrapper.pack(pady=5, fill="x")
@@ -75,17 +131,113 @@ def add_row(label_text, default=""):
     entry.xview_moveto(0)
     return entry
 
+# ===== Tooltip Class =====
+class ToolTip:
+    def __init__(self, widget, text):
+        self.widget = widget
+        self.text = text
+        self.tip_window = None
+        widget.bind("<Enter>", self.show_tip)
+        widget.bind("<Leave>", self.hide_tip)
 
+    def show_tip(self, event=None):
+        if self.tip_window or not self.text:
+            return
+        x, y, _, _ = self.widget.bbox("insert")  # position near cursor
+        x += self.widget.winfo_rootx() + 20
+        y += self.widget.winfo_rooty() + 20
+        self.tip_window = tw = tk.Toplevel(self.widget)
+        tw.wm_overrideredirect(True)  # remove window borders
+        tw.wm_geometry(f"+{x}+{y}")
+        label = tk.Label(tw, text=self.text, justify="left",
+                         background="#ffffe0", relief="solid", borderwidth=1,
+                         font=("tahoma", "8", "normal"))
+        label.pack(ipadx=5, ipady=3)
 
+    def hide_tip(self, event=None):
+        if self.tip_window:
+            self.tip_window.destroy()
+            self.tip_window = None
 
+# ===== Distribution File Checkbox + Chance =====
+distribution_frame = tk.Frame(fields_frame, bg=DARK_BG)
+distribution_frame.pack(pady=4, fill="x")
+
+distribution_var = tk.BooleanVar(value=False)
+
+# Label for Item Spawning Chance
+label_spawning_chance = tk.Label(
+    distribution_frame, text="Item Spawning Chance:", bg=DARK_BG, fg=DARK_FG
+)
+
+# Entry for distribution lists
+entry_distribution_lists = tk.Entry(
+    distribution_frame, width=40,
+    bg=DARK_BG, fg=DARK_FG, insertbackground=DARK_FG,
+    state="disabled", takefocus=False
+)
+
+# Entry for spawning chance
+entry_spawning_chance = tk.Entry(
+    distribution_frame, width=6,
+    bg=DARK_BG, fg=DARK_FG, insertbackground=DARK_FG,
+    state="disabled", takefocus=False
+)
+entry_spawning_chance.insert(0, "1")  # default value
+
+def toggle_distribution():
+    state = "normal" if distribution_var.get() else "disabled"
+    entry_distribution_lists.config(state=state, takefocus=distribution_var.get())
+    entry_spawning_chance.config(state=state, takefocus=distribution_var.get())
+    if state == "disabled":
+        entry_distribution_lists.delete(0, tk.END)
+        entry_spawning_chance.delete(0, tk.END)
+        entry_spawning_chance.insert(0, "1")  # reset default
+
+distribution_cb = tk.Checkbutton(
+    distribution_frame,
+    text="Create Distribution File:",
+    variable=distribution_var,
+    command=toggle_distribution,
+    bg=DARK_BG, fg=DARK_FG,
+    selectcolor=DARK_BG,
+    activebackground=DARK_BG,
+    takefocus=False
+)
+
+# Pack widgets
+distribution_cb.pack(side="left", padx=5)
+entry_distribution_lists.pack(side="left", padx=5, fill="x", expand=True)
+
+# Spawning chance label and entry next to each other
+label_spawning_chance.pack(side="left", padx=(10,2))
+entry_spawning_chance.pack(side="left", padx=2)
+
+ToolTip(distribution_cb, "Check to generate a Distribution file. Enter distribution list names separated by commas.")
+ToolTip(entry_distribution_lists, "Example: SchoolLockers,CafeteriaDrinks,ClassroomDesk,FridgeOffice,FridgeSoda")
+ToolTip(entry_spawning_chance, "Enter a value for ItemSpawningChance (default is 1)")
+
+# ===== Basic Info Fields =====
 entry_module = add_row("Module Name:")
-entry_item = add_row("Item Internal Name:")
-entry_category = add_row("Display Category:")
-entry_itemtype = add_row("Item Type:")
-entry_weight = add_row("Weight:")
-entry_ingame = add_row("Item In-Game Name:")
-entry_asset = add_row("Model / Texture / Icon:")
+ToolTip(entry_module, "The name of your module. Usually lowercase, no spaces.")
 
+entry_item = add_row("Item Internal Name:")
+ToolTip(entry_item, "Internal identifier for the item. Used in scripts. No spaces or special characters.")
+
+entry_category = add_row("Display Category:")
+ToolTip(entry_category, "Category in the game. Example: Food, Weapons, Tools.")
+
+entry_itemtype = add_row("Item Type:")
+ToolTip(entry_itemtype, "The base item type. Example: Base:Food, Base:FirstAid, etc.")
+
+entry_weight = add_row("Weight:")
+ToolTip(entry_weight, "Item weight in the game. Use numbers only.")
+
+entry_ingame = add_row("Item In-Game Name:")
+ToolTip(entry_ingame, "The name that players will see in-game. It can have spaces and capitalization.")
+
+entry_asset = add_row("Model / Texture / Icon:")
+ToolTip(entry_asset, "Specify your model, texture, and icon files here.")
 
 # ===== Generic Row with Toggle =====
 def add_row_with_toggle(label_text, default=""):
@@ -110,49 +262,89 @@ def add_row_with_toggle(label_text, default=""):
 
     return entry, active_var
 
-entry_foodtype, foodtype_active = add_row_with_toggle("FoodType:", default="NoExplicit")
-entry_eattype, eattype_active = add_row_with_toggle("EatType:", default="EatSmall")
-entry_cookingsound, cookingsound_active = add_row_with_toggle("CookingSound:", default="FryingFood")
-entry_eatingsound, eatingsound_active = add_row_with_toggle("CustomEatSound:", default="EatingCrispy")
-entry_herbalisttype, herbalisttype_active = add_row_with_toggle("HerbalistType:", default="None")
+# ===== Food / Eat / Sound Fields =====
+entry_foodtype, foodtype_active = add_row_with_toggle("FoodType:")
+ToolTip(entry_foodtype, "Type of food item. Example: NoExplicit, Egg, Berry, Vegetables.")
 
-# ===== Hunger/Thirst/Stats Fields =====
-def add_inc_dec_row(parent_frame, label_text):
+entry_eattype, eattype_active = add_row_with_toggle("EatType:")
+ToolTip(entry_eattype, "Defines the eating animation. Example: EatSmall, CanDrink, EatOffStick.")
+
+entry_cookingsound, cookingsound_active = add_row_with_toggle("CookingSound:")
+ToolTip(entry_cookingsound, "Sound played when cooking this item. Example: FryingFood, BoilingFood.")
+
+entry_eatingsound, eatingsound_active = add_row_with_toggle("CustomEatSound:")
+ToolTip(entry_eatingsound, "Sound played when the item is eaten. Example: EatingCrispy, EatingMushy.")
+
+entry_herbalisttype, herbalisttype_active = add_row_with_toggle("HerbalistType:")
+ToolTip(entry_herbalisttype, "To recognize an item with this parameter, you need to know the Herbalist recipe. Example: Mushroom, Berry, Poison.")
+
+# ===== Hunger/Thirst/Stats Fields with Dropdown =====
+def add_stat_dropdown_row(parent_frame, label_text):
     frame = tk.Frame(parent_frame, bg=DARK_BG)
     frame.pack(pady=2, fill="x")
+
     tk.Label(frame, text=label_text, width=20, anchor="e", bg=DARK_BG, fg=DARK_FG).pack(side="left")
-    entry = tk.Entry(frame, width=20, bg=DARK_BG, fg=DARK_FG, insertbackground=DARK_FG, state="disabled")
+
+    entry = tk.Entry(frame, width=20, bg=DARK_BG, fg=DARK_FG, insertbackground=DARK_FG)
     entry.pack(side="left", padx=5)
-    active_var = tk.BooleanVar(value=False)
-    inc_var = tk.BooleanVar(value=False)
-    dec_var = tk.BooleanVar(value=False)
-    inc_cb = tk.Checkbutton(frame, text="Increase", variable=inc_var, takefocus=False,
-                            bg=DARK_BG, fg=DARK_FG, selectcolor=DARK_BG, activebackground=DARK_BG, state="disabled")
-    dec_cb = tk.Checkbutton(frame, text="Decrease", variable=dec_var, takefocus=False,
-                            bg=DARK_BG, fg=DARK_FG, selectcolor=DARK_BG, activebackground=DARK_BG, state="disabled")
-    inc_cb.pack(side="left", padx=2)
-    dec_cb.pack(side="left", padx=2)
 
-    def toggle_inc():
-        if inc_var.get(): dec_var.set(False)
-    def toggle_dec():
-        if dec_var.get(): inc_var.set(False)
+    # Dropdown choices
+    choice_var = tk.StringVar(value="Inactive")
+    dropdown = ttk.Combobox(frame, textvariable=choice_var,
+                            values=["Inactive", "Increase", "Decrease"],
+                            width=10, state="readonly",
+                            takefocus=0)  # <-- skip in tab order
+    dropdown.pack(side="left", padx=5)
 
-    inc_var.trace_add("write", lambda *args: toggle_inc())
-    dec_var.trace_add("write", lambda *args: toggle_dec())
+    def update_entry_state(event=None):
+        if choice_var.get() == "Inactive":
+            entry.config(state="disabled")
+            entry.delete(0, tk.END)
+        else:
+            entry.config(state="normal")
 
-    def toggle_active():
-        state = "normal" if active_var.get() else "disabled"
-        entry.config(state=state)
-        inc_cb.config(state=state)
-        dec_cb.config(state=state)
-        if state == "disabled":
-            inc_var.set(False)
-            dec_var.set(False)
+    dropdown.bind("<<ComboboxSelected>>", update_entry_state)
+    update_entry_state()
 
-    tk.Checkbutton(frame, text="Active", variable=active_var, command=toggle_active,
-                   takefocus=False, bg=DARK_BG, fg=DARK_FG, selectcolor=DARK_BG, activebackground=DARK_BG).pack(side="left", padx=2)
-    return entry, active_var, inc_var, dec_var
+    return entry, choice_var
+
+# ===== Stat Frames =====
+hunger_frame = tk.Frame(fields_frame, bg=DARK_BG); hunger_frame.pack()
+thirst_frame = tk.Frame(fields_frame, bg=DARK_BG); thirst_frame.pack()
+unhappy_frame = tk.Frame(fields_frame, bg=DARK_BG); unhappy_frame.pack()
+stress_frame = tk.Frame(fields_frame, bg=DARK_BG); stress_frame.pack()
+boredom_frame = tk.Frame(fields_frame, bg=DARK_BG); boredom_frame.pack()
+fatigue_frame = tk.Frame(fields_frame, bg=DARK_BG); fatigue_frame.pack()
+endurance_frame = tk.Frame(fields_frame, bg=DARK_BG); endurance_frame.pack()
+
+# ===== Stat Rows =====
+entry_hunger, hunger_choice = add_stat_dropdown_row(hunger_frame, "HungerChange:")
+ToolTip(entry_hunger.master.children['!combobox'], 
+        "Decrease: reduces hunger (fills you up)\nIncrease: increases hunger")
+
+entry_thirst, thirst_choice = add_stat_dropdown_row(thirst_frame, "ThirstChange:")
+ToolTip(entry_thirst.master.children['!combobox'], 
+        "Decrease: reduces thirst (quenches you)\nIncrease: increases thirst")
+
+entry_unhappy, unhappy_choice = add_stat_dropdown_row(unhappy_frame, "UnhappyChange:")
+ToolTip(entry_unhappy.master.children['!combobox'], 
+        "Decrease: reduces unhappiness\nIncrease: increases unhappiness")
+
+entry_stress, stress_choice = add_stat_dropdown_row(stress_frame, "StressChange:")
+ToolTip(entry_stress.master.children['!combobox'], 
+        "Decrease: reduces stress\nIncrease: increases stress")
+
+entry_boredom, boredom_choice = add_stat_dropdown_row(boredom_frame, "BoredomChange:")
+ToolTip(entry_boredom.master.children['!combobox'], 
+        "Decrease: reduces boredom\nIncrease: increases boredom")
+
+entry_fatigue, fatigue_choice = add_stat_dropdown_row(fatigue_frame, "FatigueChange:")
+ToolTip(entry_fatigue.master.children['!combobox'], 
+        "Decrease: reduces fatigue\nIncrease: increases fatigue")
+
+entry_endurance, endurance_choice = add_stat_dropdown_row(endurance_frame, "EnduranceChange:")
+ToolTip(entry_endurance.master.children['!combobox'], 
+        "Decrease: reduces endurance\nIncrease: increases endurance")
 
 # ===== Decrease-Only Stat Rows =====
 def add_decrease_only_row(parent_frame, label_text):
@@ -162,43 +354,40 @@ def add_decrease_only_row(parent_frame, label_text):
     entry = tk.Entry(frame, width=20, bg=DARK_BG, fg=DARK_FG, insertbackground=DARK_FG, state="disabled")
     entry.pack(side="left", padx=5)
     active_var = tk.BooleanVar(value=False)
+
     def toggle_active():
         state = "normal" if active_var.get() else "disabled"
         entry.config(state=state)
         if state == "disabled":
             entry.delete(0, tk.END)
+
     tk.Checkbutton(frame, text="Active", variable=active_var, command=toggle_active,
                    takefocus=False, bg=DARK_BG, fg=DARK_FG, selectcolor=DARK_BG, activebackground=DARK_BG).pack(side="left", padx=4)
     return entry, active_var
 
-# ===== Stat Change Fields =====
-hunger_frame = tk.Frame(fields_frame, bg=DARK_BG); hunger_frame.pack()
-thirst_frame = tk.Frame(fields_frame, bg=DARK_BG); thirst_frame.pack()
-unhappy_frame = tk.Frame(fields_frame, bg=DARK_BG); unhappy_frame.pack()
-stress_frame = tk.Frame(fields_frame, bg=DARK_BG); stress_frame.pack()
-boredom_frame = tk.Frame(fields_frame, bg=DARK_BG); boredom_frame.pack()
-fatigue_frame = tk.Frame(fields_frame, bg=DARK_BG); fatigue_frame.pack()
-endurance_frame = tk.Frame(fields_frame, bg=DARK_BG); endurance_frame.pack()
+# ===== Decrease-Only Stats =====
 flu_frame = tk.Frame(fields_frame, bg=DARK_BG); flu_frame.pack()
 pain_frame = tk.Frame(fields_frame, bg=DARK_BG); pain_frame.pack()
 sickness_frame = tk.Frame(fields_frame, bg=DARK_BG); sickness_frame.pack()
 infection_frame = tk.Frame(fields_frame, bg=DARK_BG); infection_frame.pack()
-poisonpower_frame = tk.Frame(fields_frame, bg=DARK_BG); infection_frame.pack()
 
-# ===== Create Stat Entry Rows =====
-entry_hunger, hunger_active, hunger_inc, hunger_dec = add_inc_dec_row(hunger_frame, "HungerChange:")
-entry_thirst, thirst_active, thirst_inc, thirst_dec = add_inc_dec_row(thirst_frame, "ThirstChange:")
-entry_unhappy, unhappy_active, unhappy_inc, unhappy_dec = add_inc_dec_row(unhappy_frame, "UnhappyChange:")
-entry_stress, stress_active, stress_inc, stress_dec = add_inc_dec_row(stress_frame, "StressChange:")
-entry_boredom, boredom_active, boredom_inc, boredom_dec = add_inc_dec_row(boredom_frame, "BoredomChange:")
-entry_fatigue, fatigue_active, fatigue_inc, fatigue_dec = add_inc_dec_row(fatigue_frame, "FatigueChange:")
-entry_endurance, endurance_active, endurance_inc, endurance_dec = add_inc_dec_row(endurance_frame, "EnduranceChange:")
 entry_flu, flu_active = add_decrease_only_row(flu_frame, "FluReduction:")
+ToolTip(entry_flu, "Reduces the flu status when consumed.")
+
 entry_pain, pain_active = add_decrease_only_row(pain_frame, "PainReduction:")
+ToolTip(entry_pain, "Reduces the pain status when consumed.")
+
 entry_food_sick, food_sick_active = add_decrease_only_row(sickness_frame, "ReduceFoodSickness:")
+ToolTip(entry_food_sick, "Reduces the food sickness level.")
+
 entry_infection, infection_active = add_decrease_only_row(infection_frame, "ReduceInfectionPower:")
+ToolTip(entry_infection, "Reduces infection power.")
+
 entry_poisonpower, poisonpower_active = add_decrease_only_row(infection_frame, "PoisonPower:")
+ToolTip(entry_poisonpower, "Determines how poisonous the item is.")
+
 entry_usedelta, usedelta_active = add_decrease_only_row(infection_frame, "UseDelta:")
+ToolTip(entry_usedelta, "Determines how much of the drainable item's value is spent on a single use.")
 
 # ===== Nutrition Fields =====
 def add_inline_row(fields):
@@ -225,11 +414,15 @@ def add_inline_row(fields):
     return (*entries, active_var)
 
 entry_carbs, entry_proteins, entry_lipids, entry_calories, nutrition_active = add_inline_row([
-    ("Carbs:", 8),
+    ("Carbohydrates:", 8),
     ("Proteins:", 8),
     ("Lipids:", 8),
     ("Calories:", 8),
 ])
+ToolTip(entry_carbs, "Amount of carbohydrates in the item. Use numbers only.")
+ToolTip(entry_proteins, "Amount of proteins in the item. Use numbers only.")
+ToolTip(entry_lipids, "Amount of lipids/fats in the item. Use numbers only.")
+ToolTip(entry_calories, "Total calories provided by the item. Use numbers only.")
 
 cook_perishable_frame = tk.Frame(fields_frame, bg=DARK_BG)
 cook_perishable_frame.pack(pady=2, anchor="center")
@@ -239,24 +432,25 @@ iscookable_var = tk.BooleanVar(value=False)
 minutes_to_cook_entry = tk.Entry(
     cook_perishable_frame, width=6,
     bg=DARK_BG, fg=DARK_FG, insertbackground=DARK_FG,
-    state="disabled"
+    state="disabled", takefocus=False  # initially skipped in Tab
 )
 
 minutes_to_burn_entry = tk.Entry(
     cook_perishable_frame, width=6,
     bg=DARK_BG, fg=DARK_FG, insertbackground=DARK_FG,
-    state="disabled"
+    state="disabled", takefocus=False
 )
 
 def toggle_cookable():
     state = "normal" if iscookable_var.get() else "disabled"
-    minutes_to_cook_entry.config(state=state)
-    minutes_to_burn_entry.config(state=state)
+    minutes_to_cook_entry.config(state=state, takefocus=iscookable_var.get())
+    minutes_to_burn_entry.config(state=state, takefocus=iscookable_var.get())
     if state == "disabled":
         minutes_to_cook_entry.delete(0, tk.END)
         minutes_to_burn_entry.delete(0, tk.END)
 
-tk.Checkbutton(
+# Checkbutton
+cook_check = tk.Checkbutton(
     cook_perishable_frame,
     text="Is Cookable:",
     variable=iscookable_var,
@@ -265,39 +459,59 @@ tk.Checkbutton(
     selectcolor=DARK_BG,
     activebackground=DARK_BG,
     takefocus=False
-).pack(side="left", padx=(5, 2))
+)
+cook_check.pack(side="left", padx=(5, 2))
 
+# Tooltip for the checkbutton
+ToolTip(cook_check, "If checked, this item can be cooked. Enables the cooking time entries.")
+
+# Minutes to Cook
 tk.Label(
     cook_perishable_frame,
     text="Minutes To Cook:",
     bg=DARK_BG, fg=DARK_FG
 ).pack(side="left", padx=(2, 2))
-
 minutes_to_cook_entry.pack(side="left", padx=(0, 6))
+ToolTip(minutes_to_cook_entry, "Time in minutes it takes to fully cook this item.")
 
+# Minutes to Burn
 tk.Label(
     cook_perishable_frame,
     text="Minutes To Burn:",
     bg=DARK_BG, fg=DARK_FG
 ).pack(side="left", padx=(2, 2))
-
 minutes_to_burn_entry.pack(side="left", padx=(0, 15))
+ToolTip(minutes_to_burn_entry, "Time in minutes before the cooked item burns. Must be greater than 'Minutes To Cook'.")
 
+# ===== Perishable Fields =====
 
-# ======================
-# Is Perishable
-# ======================
 perishable_var = tk.BooleanVar(value=False)
+
+entry_days_fresh = tk.Entry(
+    cook_perishable_frame, width=6,
+    bg=DARK_BG, fg=DARK_FG, insertbackground=DARK_FG,
+    state="disabled", takefocus=False
+)
+entry_days_fresh.insert(0, "0")
+
+entry_days_rotten = tk.Entry(
+    cook_perishable_frame, width=6,
+    bg=DARK_BG, fg=DARK_FG, insertbackground=DARK_FG,
+    state="disabled", takefocus=False
+)
+entry_days_rotten.insert(0, "0")
 
 def toggle_perishable():
     state = "normal" if perishable_var.get() else "disabled"
-    entry_days_fresh.config(state=state)
-    entry_days_rotten.config(state=state)
+    entry_days_fresh.config(state=state, takefocus=perishable_var.get())
+    entry_days_rotten.config(state=state, takefocus=perishable_var.get())
     if state == "disabled":
         entry_days_fresh.delete(0, tk.END)
         entry_days_rotten.delete(0, tk.END)
+        entry_days_fresh.insert(0, "0")
+        entry_days_rotten.insert(0, "0")
 
-tk.Checkbutton(
+perishable_check = tk.Checkbutton(
     cook_perishable_frame,
     text="Is Perishable:",
     variable=perishable_var,
@@ -306,48 +520,37 @@ tk.Checkbutton(
     selectcolor=DARK_BG,
     activebackground=DARK_BG,
     takefocus=False
-).pack(side="left", padx=(5, 2))
+)
+perishable_check.pack(side="left", padx=(5, 2))
+ToolTip(perishable_check, "If checked, this item will spoil over time. Enables 'Days Fresh' and 'Days Rotten'.")
 
 tk.Label(
     cook_perishable_frame,
     text="Days Fresh:",
     bg=DARK_BG, fg=DARK_FG
 ).pack(side="left", padx=(2, 2))
-
-entry_days_fresh = tk.Entry(
-    cook_perishable_frame, width=6,
-    bg=DARK_BG, fg=DARK_FG, insertbackground=DARK_FG,
-    state="disabled"
-)
 entry_days_fresh.pack(side="left", padx=(0, 6))
-entry_days_fresh.insert(0, "0")
+ToolTip(entry_days_fresh, "Number of in-game days this item stays fresh before starting to rot.")
 
 tk.Label(
     cook_perishable_frame,
     text="Days Rotten:",
     bg=DARK_BG, fg=DARK_FG
 ).pack(side="left", padx=(2, 2))
-
-entry_days_rotten = tk.Entry(
-    cook_perishable_frame, width=6,
-    bg=DARK_BG, fg=DARK_FG, insertbackground=DARK_FG,
-    state="disabled"
-)
 entry_days_rotten.pack(side="left", padx=(0, 5))
-entry_days_rotten.insert(0, "0")
+ToolTip(entry_days_rotten, "Number of in-game days after which the item is completely rotten and useless.")
+
+# ===== Replace Fields =====
 
 replace_row = tk.Frame(fields_frame, bg=DARK_BG)
 replace_row.pack(pady=2, anchor="center")
 
-# ======================
-# ReplaceOnCooked
-# ======================
+# --- ReplaceOnCooked ---
 replace_cooked_var = tk.BooleanVar(value=False)
-
 entry_replace_cooked = tk.Entry(
     replace_row, width=28,
     bg=DARK_BG, fg=DARK_FG, insertbackground=DARK_FG,
-    state="disabled"
+    state="disabled", takefocus=False
 )
 
 def toggle_replace_cooked():
@@ -356,12 +559,11 @@ def toggle_replace_cooked():
         toggle_cookable()
 
     state = "normal" if replace_cooked_var.get() else "disabled"
-    entry_replace_cooked.config(state=state)
-
+    entry_replace_cooked.config(state=state, takefocus=replace_cooked_var.get())
     if state == "disabled":
         entry_replace_cooked.delete(0, tk.END)
 
-tk.Checkbutton(
+replace_cooked_check = tk.Checkbutton(
     replace_row,
     text="ReplaceOnCooked:",
     variable=replace_cooked_var,
@@ -370,19 +572,19 @@ tk.Checkbutton(
     selectcolor=DARK_BG,
     activebackground=DARK_BG,
     takefocus=False
-).pack(side="left", padx=(5, 2))
+)
+replace_cooked_check.pack(side="left", padx=(5, 2))
+ToolTip(replace_cooked_check, "When checked, the item is replaced with this value when cooked.")
 
 entry_replace_cooked.pack(side="left", padx=(0, 5))
+ToolTip(entry_replace_cooked, "Internal item name to replace this item with when cooked.")
 
-# ======================
-# ReplaceOnRotten
-# ======================
+# --- ReplaceOnRotten ---
 replace_var = tk.BooleanVar(value=False)
-
 entry_replace = tk.Entry(
     replace_row, width=28,
     bg=DARK_BG, fg=DARK_FG, insertbackground=DARK_FG,
-    state="disabled"
+    state="disabled", takefocus=False
 )
 
 def toggle_replace():
@@ -391,12 +593,11 @@ def toggle_replace():
         toggle_perishable()
 
     state = "normal" if replace_var.get() and perishable_var.get() else "disabled"
-    entry_replace.config(state=state)
-
+    entry_replace.config(state=state, takefocus=replace_var.get() and perishable_var.get())
     if state == "disabled":
         entry_replace.delete(0, tk.END)
 
-tk.Checkbutton(
+replace_check = tk.Checkbutton(
     replace_row,
     text="ReplaceOnRotten:",
     variable=replace_var,
@@ -405,47 +606,31 @@ tk.Checkbutton(
     selectcolor=DARK_BG,
     activebackground=DARK_BG,
     takefocus=False
-).pack(side="left", padx=(5, 2))
+)
+replace_check.pack(side="left", padx=(5, 2))
+ToolTip(replace_check, "When checked, the item is replaced with this value when it becomes rotten.")
 
 entry_replace.pack(side="left", padx=(0, 20))
+ToolTip(entry_replace, "Internal item name to replace this item with when it rots.")
 
-old_toggle_perishable = lambda: None
-try: old_toggle_perishable = toggle_perishable
-except: pass
-def toggle_perishable():
-    state = "normal" if perishable_var.get() else "disabled"
-    entry_days_fresh.config(state=state)
-    entry_days_rotten.config(state=state)
-    if state == "disabled":
-        entry_days_fresh.delete(0, tk.END)
-        entry_days_rotten.delete(0, tk.END)
-
-    if not perishable_var.get():
-        replace_var.set(False)
-        entry_replace.config(state="disabled")
-
-
+# --- ReplaceOnUse ---
 use_sound_row = tk.Frame(fields_frame, bg=DARK_BG)
 use_sound_row.pack(pady=2, anchor="center")
 
-# ======================
-# ReplaceOnUse
-# ======================
 replace_use_var = tk.BooleanVar(value=False)
-
 entry_replace_use = tk.Entry(
     use_sound_row, width=26,
     bg=DARK_BG, fg=DARK_FG, insertbackground=DARK_FG,
-    state="disabled"
+    state="disabled", takefocus=False
 )
 
 def toggle_replace_use():
     state = "normal" if replace_use_var.get() else "disabled"
-    entry_replace_use.config(state=state)
+    entry_replace_use.config(state=state, takefocus=replace_use_var.get())
     if state == "disabled":
         entry_replace_use.delete(0, tk.END)
 
-tk.Checkbutton(
+replace_use_check = tk.Checkbutton(
     use_sound_row,
     text="ReplaceOnUse:",
     variable=replace_use_var,
@@ -454,76 +639,150 @@ tk.Checkbutton(
     selectcolor=DARK_BG,
     activebackground=DARK_BG,
     takefocus=False
-).pack(side="left", padx=(5, 2))
+)
+replace_use_check.pack(side="left", padx=(5, 2))
+ToolTip(replace_use_check, "When checked, the item is replaced with this value when used.")
 
 entry_replace_use.pack(side="left", padx=(0, 20))
+ToolTip(entry_replace_use, "Internal item name to replace this item with when used.")
+
 
 # ===== Tags Field =====
 tags_frame = tk.Frame(fields_frame, bg=DARK_BG)
 tags_frame.pack(pady=4, fill="x")
-tags_var = tk.BooleanVar(value=False)
-def toggle_tags():
-    if tags_var.get():
-        entry_tags.config(state="normal")
-    else:
-        entry_tags.delete(0, tk.END)
-        entry_tags.config(state="disabled")
-tags_cb = tk.Checkbutton(tags_frame, text="Add Tags:", variable=tags_var, command=toggle_tags,
-                         bg=DARK_BG, fg=DARK_FG, selectcolor=DARK_BG, activebackground=DARK_BG)
-tags_cb.pack(side="left", padx=5)
-entry_tags = tk.Entry(tags_frame, width=40, bg=DARK_BG, fg=DARK_FG, insertbackground=DARK_FG, state="disabled")
-entry_tags.pack(side="left", padx=5, fill="x", expand=True)
 
+tags_var = tk.BooleanVar(value=False)
+
+entry_tags = tk.Entry(
+    tags_frame, width=40,
+    bg=DARK_BG, fg=DARK_FG, insertbackground=DARK_FG,
+    state="disabled", takefocus=False
+)
+
+def toggle_tags():
+    state = "normal" if tags_var.get() else "disabled"
+    entry_tags.config(state=state, takefocus=tags_var.get())
+    if state == "disabled":
+        entry_tags.delete(0, tk.END)
+
+tags_cb = tk.Checkbutton(
+    tags_frame,
+    text="Add Tags:",
+    variable=tags_var,
+    command=toggle_tags,
+    bg=DARK_BG, fg=DARK_FG,
+    selectcolor=DARK_BG,
+    activebackground=DARK_BG,
+    takefocus=False
+)
+tags_cb.pack(side="left", padx=5)
+ToolTip(tags_cb, "Enable this to add custom tags to the item. Tags can affect gameplay or mods.")
+
+entry_tags.pack(side="left", padx=5, fill="x", expand=True)
+ToolTip(entry_tags, "Separated list of tags. Example: base:herbaltea;base:commonmallow")
 
 # ===== Tooltip Field =====
 tooltip_frame = tk.Frame(fields_frame, bg=DARK_BG)
 tooltip_frame.pack(pady=4, fill="x")
+
 tooltip_var = tk.BooleanVar(value=False)
+
+entry_tooltip = tk.Entry(
+    tooltip_frame, width=40,
+    bg=DARK_BG, fg=DARK_FG, insertbackground=DARK_FG,
+    state="disabled", takefocus=False
+)
+
 def toggle_tooltip():
-    if tooltip_var.get():
-        entry_tooltip.config(state="normal")
-    else:
+    state = "normal" if tooltip_var.get() else "disabled"
+    entry_tooltip.config(state=state, takefocus=tooltip_var.get())
+    if state == "disabled":
         entry_tooltip.delete(0, tk.END)
-        entry_tooltip.config(state="disabled")
-tooltip_cb = tk.Checkbutton(tooltip_frame, text="Add Tooltip:", variable=tooltip_var, command=toggle_tooltip,
-                         bg=DARK_BG, fg=DARK_FG, selectcolor=DARK_BG, activebackground=DARK_BG)
+
+tooltip_cb = tk.Checkbutton(
+    tooltip_frame,
+    text="Add Tooltip:",
+    variable=tooltip_var,
+    command=toggle_tooltip,
+    bg=DARK_BG, fg=DARK_FG,
+    selectcolor=DARK_BG,
+    activebackground=DARK_BG,
+    takefocus=False
+)
 tooltip_cb.pack(side="left", padx=5)
-entry_tooltip = tk.Entry(tooltip_frame, width=40, bg=DARK_BG, fg=DARK_FG, insertbackground=DARK_FG, state="disabled")
+ToolTip(tooltip_cb, "Enable this to add a tooltip for the item. Tooltips appear in-game when hovering.")
+
 entry_tooltip.pack(side="left", padx=5, fill="x", expand=True)
-
-
+ToolTip(entry_tooltip, 'Example: "Tooltip_Mallow" located in Translation Files (ToolTip_EN)')
 
 # ===== OnEat Field =====
 oneat_frame = tk.Frame(fields_frame, bg=DARK_BG)
 oneat_frame.pack(pady=4, fill="x")
+
 oneat_var = tk.BooleanVar(value=False)
+
+entry_oneat = tk.Entry(
+    oneat_frame, width=40,
+    bg=DARK_BG, fg=DARK_FG, insertbackground=DARK_FG,
+    state="disabled", takefocus=False
+)
+
 def toggle_oneat():
-    if oneat_var.get():
-        entry_oneat.config(state="normal")
-    else:
+    state = "normal" if oneat_var.get() else "disabled"
+    entry_oneat.config(state=state, takefocus=oneat_var.get())
+    if state == "disabled":
         entry_oneat.delete(0, tk.END)
-        entry_oneat.config(state="disabled")
-oneat_cb = tk.Checkbutton(oneat_frame, text="Add OnEat:", variable=oneat_var, command=toggle_oneat,
-                         bg=DARK_BG, fg=DARK_FG, selectcolor=DARK_BG, activebackground=DARK_BG)
+
+oneat_cb = tk.Checkbutton(
+    oneat_frame,
+    text="Add OnEat:",
+    variable=oneat_var,
+    command=toggle_oneat,
+    bg=DARK_BG, fg=DARK_FG,
+    selectcolor=DARK_BG,
+    activebackground=DARK_BG,
+    takefocus=False
+)
 oneat_cb.pack(side="left", padx=5)
-entry_oneat = tk.Entry(oneat_frame, width=40, bg=DARK_BG, fg=DARK_FG, insertbackground=DARK_FG, state="disabled")
+ToolTip(oneat_cb, "Enable this to add a custom OnEat script for this item. Requires a Lua function.")
+
 entry_oneat.pack(side="left", padx=5, fill="x", expand=True)
+ToolTip(entry_oneat, 'Enter the Lua function name to run on consumption. Example: "RecipeCodeOnEat_MyItem".')
+
 
 # ===== CustomContextMenu Field =====
 customcontextmenu_frame = tk.Frame(fields_frame, bg=DARK_BG)
 customcontextmenu_frame.pack(pady=4, fill="x")
+
 customcontextmenu_var = tk.BooleanVar(value=False)
+
+entry_customcontextmenu = tk.Entry(
+    customcontextmenu_frame, width=40,
+    bg=DARK_BG, fg=DARK_FG, insertbackground=DARK_FG,
+    state="disabled", takefocus=False
+)
+
 def toggle_customcontextmenu():
-    if customcontextmenu_var.get():
-        entry_customcontextmenu.config(state="normal")
-    else:
+    state = "normal" if customcontextmenu_var.get() else "disabled"
+    entry_customcontextmenu.config(state=state, takefocus=customcontextmenu_var.get())
+    if state == "disabled":
         entry_customcontextmenu.delete(0, tk.END)
-        entry_customcontextmenu.config(state="disabled")
-customcontextmenu_cb = tk.Checkbutton(customcontextmenu_frame, text="Add CustomContextMenu:", variable=customcontextmenu_var, command=toggle_customcontextmenu,
-                         bg=DARK_BG, fg=DARK_FG, selectcolor=DARK_BG, activebackground=DARK_BG)
+
+customcontextmenu_cb = tk.Checkbutton(
+    customcontextmenu_frame,
+    text="Add CustomContextMenu:",
+    variable=customcontextmenu_var,
+    command=toggle_customcontextmenu,
+    bg=DARK_BG, fg=DARK_FG,
+    selectcolor=DARK_BG,
+    activebackground=DARK_BG,
+    takefocus=False
+)
 customcontextmenu_cb.pack(side="left", padx=5)
-entry_customcontextmenu = tk.Entry(customcontextmenu_frame, width=40, bg=DARK_BG, fg=DARK_FG, insertbackground=DARK_FG, state="disabled")
+ToolTip(customcontextmenu_cb, "Enable this to add a custom context menu for this item in-game.")
+
 entry_customcontextmenu.pack(side="left", padx=5, fill="x", expand=True)
+ToolTip(entry_customcontextmenu, 'Enter the Lua function or menu name. Example: "CustomContextMenu_MyItem".')
 
 # ===== Additional Flags =====
 flags_frame = tk.Frame(fields_frame, bg=DARK_BG)
@@ -581,46 +840,27 @@ evolved_frame.pack(pady=4, fill="x")
 
 evolved_var = tk.BooleanVar(value=False)
 
-def toggle_evolved():
-    evolved_name_entry.config(state="normal" if evolved_var.get() else "disabled")
-    for btn in evolved_cbs_buttons:
-        btn.config(state="normal" if evolved_var.get() else "disabled")
-    sweet_toggle_cb.config(state="normal" if evolved_var.get() else "disabled")
-    salty_toggle_cb.config(state="normal" if evolved_var.get() else "disabled")
-
-evolved_cb = tk.Checkbutton(
-    evolved_frame,
-    text="EvolvedRecipe:",
-    variable=evolved_var,
-    command=toggle_evolved,
-    bg=DARK_BG,
-    fg=DARK_FG,
-    selectcolor=DARK_BG,
-    activebackground=DARK_BG
-)
-evolved_cb.pack(side="left", padx=5)
-
-# Evolved Recipe Name Entry
 tk.Label(evolved_frame, text="Evolved Recipe Name:", bg=DARK_BG, fg=DARK_FG).pack(side="left", padx=2)
 evolved_name_entry = tk.Entry(
     evolved_frame, bg=DARK_BG, fg=DARK_FG, insertbackground=DARK_FG,
-    state="disabled", width=25
+    state="disabled", width=25, takefocus=False
 )
 evolved_name_entry.pack(side="left", padx=0, fill="x", expand=True)
+ToolTip(evolved_name_entry, "Internal name for the evolved recipe. Example: 'ChocolateCakeEvolved'.")
 
-# Sweet and Salty Recipes
-sweet_list = ["Pancakes","Muffin","ConeIcecream","Cake","PieSweet","Oatmeal","Toast"]
-salty_list = ["Sandwich","Stir fry","Pasta","Taco","Burrito","Salad","Soup","Stew","Bread"]
-
+# Sweet and Salty frames
 sweet_frame = tk.Frame(fields_frame, bg=DARK_BG)
 sweet_frame.pack(pady=3, fill="x")
 salty_frame = tk.Frame(fields_frame, bg=DARK_BG)
 salty_frame.pack(pady=3, fill="x")
 
+sweet_list = ["Pancakes","Muffin","ConeIcecream","Cake","PieSweet","Oatmeal","Toast"]
+salty_list = ["Sandwich","Stir fry","Pasta","Taco","Burrito","Salad","Soup","Stew","Bread"]
+
 sweet_var = tk.BooleanVar(value=False)
 salty_var = tk.BooleanVar(value=False)
 
-# "Mark All" Checkboxes
+# "Mark All" toggles
 def toggle_all_sweet():
     if evolved_var.get():
         for btn in evolved_cbs_buttons:
@@ -637,57 +877,95 @@ def toggle_all_salty():
 
 sweet_toggle_cb = tk.Checkbutton(
     sweet_frame, text="Mark All Sweet", variable=sweet_var, command=toggle_all_sweet,
-    bg=DARK_BG, fg=DARK_FG, selectcolor=DARK_BG, activebackground=DARK_BG, state="disabled"
+    bg=DARK_BG, fg=DARK_FG, selectcolor=DARK_BG, activebackground=DARK_BG, state="disabled",
+    takefocus=False
 )
 sweet_toggle_cb.pack(side="left", padx=5)
+ToolTip(sweet_toggle_cb, "Check to mark all sweet recipes in this evolved recipe.")
 
 salty_toggle_cb = tk.Checkbutton(
     salty_frame, text="Mark All Salty", variable=salty_var, command=toggle_all_salty,
-    bg=DARK_BG, fg=DARK_FG, selectcolor=DARK_BG, activebackground=DARK_BG, state="disabled"
+    bg=DARK_BG, fg=DARK_FG, selectcolor=DARK_BG, activebackground=DARK_BG, state="disabled",
+    takefocus=False
 )
 salty_toggle_cb.pack(side="left", padx=5)
+ToolTip(salty_toggle_cb, "Check to mark all salty recipes in this evolved recipe.")
 
-# ===== Individual Evolved Recipe Toggle Buttons =====
+# Individual Evolved Recipe Buttons
 evolved_cbs_buttons = []
-
 for lst, frame in [(sweet_list, sweet_frame), (salty_list, salty_frame)]:
     for item_name in lst:
         var = tk.BooleanVar(value=False)
         btn = toggle_button(frame, item_name, var, width=max(len(item_name)//1 + 2, 8))
         btn.var = var
-        btn.config(state="disabled")  # disabled until EvolvedRecipe is checked
+        btn.config(state="disabled", takefocus=False)
+        ToolTip(btn, f"Include {item_name} in this evolved recipe.")
         evolved_cbs_buttons.append(btn)
 
+# Main toggle logic
+def toggle_evolved():
+    state = "normal" if evolved_var.get() else "disabled"
+    evolved_name_entry.config(state=state, takefocus=evolved_var.get())
+    for btn in evolved_cbs_buttons:
+        btn.config(state=state)
+    sweet_toggle_cb.config(state=state)
+    salty_toggle_cb.config(state=state)
+
+evolved_cb = tk.Checkbutton(
+    evolved_frame,
+    text="EvolvedRecipe:",
+    variable=evolved_var,
+    command=toggle_evolved,
+    bg=DARK_BG,
+    fg=DARK_FG,
+    selectcolor=DARK_BG,
+    activebackground=DARK_BG,
+    takefocus=False
+)
+evolved_cb.pack(side="left", padx=5)
+ToolTip(evolved_cb, "Enable to allow this item to evolve into another recipe when crafted.")
+
+
+# ===== Flags Row 1 =====
 flags_row = tk.Frame(fields_frame, bg=DARK_BG)
 flags_row.pack(pady=2, anchor="center")
 
-toggle_button(flags_row, "Can't be Eaten", canteat_var, 12)
-toggle_button(flags_row, "Can't be Frozen", cantbefrozen_var, 13)
-toggle_button(flags_row, "It's a Spice", spice_var, 8)
-toggle_button(flags_row, "It's Packaged", packaged_var, 11)
-toggle_button(flags_row, "It's Canned Food", cannedfood_var, 14)
-toggle_button(flags_row, "It's Bad Cold", badcold_var, 12)
-toggle_button(flags_row, "It's Good Hot", goodhot_var, 12)
+def add_toggle_button(frame, text, var, size, tooltip_text):
+    btn = toggle_button(frame, text, var, size)
+    btn.var = var  # store reference to the variable
+    toggle_buttons.append(btn)
+    ToolTip(frame.winfo_children()[-1], tooltip_text)
+    return btn
 
+add_toggle_button(flags_row, "Can't be Eaten", canteat_var, 12, "Prevents the item from being eaten.")
+add_toggle_button(flags_row, "Can't be Frozen", cantbefrozen_var, 13, "Item cannot be frozen.")
+add_toggle_button(flags_row, "It's a Spice", spice_var, 8, "Marks item as a spice ingredient.")
+add_toggle_button(flags_row, "It's Packaged", packaged_var, 11, "Item is packaged.")
+add_toggle_button(flags_row, "It's Canned Food", cannedfood_var, 14, "Item is canned food.")
+add_toggle_button(flags_row, "It's Bad Cold", badcold_var, 12, "Item is unpleasant when cold.")
+add_toggle_button(flags_row, "It's Good Hot", goodhot_var, 12, "Item is pleasant when hot.")
+
+# ===== Flags Row 2 =====
 flags_row2 = tk.Frame(fields_frame, bg=DARK_BG)
 flags_row2.pack(pady=2, anchor="center")
 
-toggle_button(flags_row2, "It's Dangerous Raw", dangerous_raw_var, 16)
-toggle_button(flags_row2, "It's Bad Microwaved", badmicrowave_var, 18)
-toggle_button(flags_row2, "Removes Unhappiness when Cooked", remove_unhappy_cooked_var, 33)
-toggle_button(flags_row2, "Remove Negative Effects when Cooked", remove_negative_effects_cooked_var, 35)
-    
+add_toggle_button(flags_row2, "It's Dangerous Raw", dangerous_raw_var, 16, "Eating raw can be dangerous.")
+add_toggle_button(flags_row2, "It's Bad Microwaved", badmicrowave_var, 18, "Item quality decreases if microwaved.")
+add_toggle_button(flags_row2, "Removes Unhappiness when Cooked", remove_unhappy_cooked_var, 33, "Cooking removes unhappiness effect.")
+add_toggle_button(flags_row2, "Remove Negative Effects when Cooked", remove_negative_effects_cooked_var, 35, "Cooking removes all negative effects.")
+
+# ===== Flags Row 3 =====
 flags_row3 = tk.Frame(fields_frame, bg=DARK_BG)
 flags_row3.pack(pady=2, anchor="center")
-toggle_button(flags_row3, "It's a Medical Item", medical_var, 20)
-toggle_button(flags_row3, "It's Alcoholic", alcoholic_var, 14)
-toggle_button(flags_row3, "Can be used as Fishing Lure", fishing_var, 24)
+
+add_toggle_button(flags_row3, "It's a Medical Item", medical_var, 20, "Item is considered a medical item.")
+add_toggle_button(flags_row3, "It's Alcoholic", alcoholic_var, 14, "Item contains alcohol.")
+add_toggle_button(flags_row3, "Can be used as Fishing Lure", fishing_var, 24, "Item can be used as a fishing lure.")
 
 # ===== Template Dropdown at Top Right =====
 def template_dropdown_topright():
     top_frame = tk.Frame(root, bg=DARK_BG, width=820, height=50)
     top_frame.place(x=10, y=10)
-
 
     tk.Label(top_frame, text="SELECT TEMPLATE:", bg=DARK_BG, fg=DARK_FG).pack(side="top", padx=5)
 
@@ -739,8 +1017,6 @@ def template_dropdown_topright():
             entry_itemtype.insert(0, "drainable")
             entry_tags.insert(0, "base:consumable")
             medical_var.set(True)
-
-
             
         elif tmpl == "None":
 
@@ -778,7 +1054,6 @@ def autofill_fields(event=None):
     entry_asset.delete(0, tk.END)
     entry_asset.insert(0, text)
 entry_item.bind("<KeyRelease>", autofill_fields)
-
 
 # ===== Create Food Item Function =====
 def create_food_item():
@@ -835,8 +1110,6 @@ def create_food_item():
     cook_minutes = minutes_to_cook_entry.get().strip()
     burn_minutes = minutes_to_burn_entry.get().strip()
 
-
-
     fishing = fishing_var.get()
     dangerousraw = dangerous_raw_var.get()
     badcold = badcold_var.get()
@@ -865,7 +1138,9 @@ def create_food_item():
         ensure_dir(d)
 
 # ===== Check for Existing Item =====
-    item_file = os.path.join(items_dir, f"{module_name}_Food.txt")
+    display_category = entry_category.get().strip()  # get the current ItemType from the entry
+    item_file = os.path.join(items_dir, f"{module_name}_{display_category}.txt")
+
     if os.path.exists(item_file):
         with open(item_file, "r", encoding="utf-8") as f:
             if f"item {item_name}" in f.read():
@@ -876,10 +1151,35 @@ def create_food_item():
     translation_dir = p("media/lua/shared/translate/EN")
     ensure_dir(translation_dir)
     translation_file = os.path.join(translation_dir, f"{module_name}_ItemName_EN.txt")
+
+    # Read existing translations
+    existing_lines = []
+    if os.path.exists(translation_file):
+        with open(translation_file, "r", encoding="utf-8") as f:
+            existing_lines = f.readlines()
+
+    # Prepare the new translation line
+    new_line = f'    ItemName_{module_name}.{item_name} = "{ingame_name}",\n'
+
+    # Only add if not already present
+    if new_line not in existing_lines:
+        if not existing_lines:
+            # Add the table header if file is empty
+            existing_lines.append("ItemName_EN = {\n")
+            existing_lines.append(new_line)
+            existing_lines.append("}\n")
+        else:
+            # Insert before the last closing brace
+            for i in range(len(existing_lines)-1, -1, -1):
+                if existing_lines[i].strip() == "}":
+                    existing_lines.insert(i, new_line)
+                    break
+
+    # Write back everything
     with open(translation_file, "w", encoding="utf-8") as f:
-        f.write(f"ItemName_EN = {{\n    ItemName_{module_name}.{item_name} = \"{ingame_name}\",\n}}\n")
+        f.writelines(existing_lines)
 
-
+# ===== Create Model Definition =====
     model_script_file = os.path.join(scripts_dir, f"{module_name}_Models.txt")
     model_block = f"""model {asset_name}
 {{
@@ -888,6 +1188,51 @@ def create_food_item():
     scale = 1.0,
 }}"""
     insert_inside_last_brace(model_script_file, model_block, module_name=module_name)
+
+# ===== Distribution File Generation =====
+    if distribution_var.get():
+        dist_file_dir = p("media/lua/server")
+        ensure_dir(dist_file_dir)
+        dist_file_path = os.path.join(dist_file_dir, f"{module_name}_Distributions.lua")
+        
+        try:
+            spawning_chance = float(entry_spawning_chance.get())
+        except ValueError:
+            spawning_chance = 1  # fallback if invalid
+        
+        dist_lists = [x.strip() for x in entry_distribution_lists.get().split(",") if x.strip()]
+        
+        # Read existing lines if file exists
+        if os.path.exists(dist_file_path):
+            with open(dist_file_path, "r", encoding="utf-8") as f:
+                existing_lines = f.readlines()
+        else:
+            existing_lines = []
+
+        # Ensure require lines exist
+        requires = [
+            "require 'Items/ProceduralDistributions'\n",
+            "require 'Items/Distributions'\n\n"
+        ]
+        for req in requires:
+            if req not in existing_lines:
+                existing_lines.insert(0, req)  # add at the top
+
+        new_lines = []
+        for dist in dist_lists:
+            item_var = f"{module_name}_{item_name}SpawningChance"
+            line1 = f"local {item_var} = {spawning_chance}\n"
+            line2 = f'table.insert(ProceduralDistributions["list"]["{dist}"].items, "{module_name}.{item_name}");\n'
+            line3 = f"table.insert(ProceduralDistributions['list']['{dist}'].items, {item_var} * 0.1);\n\n"
+
+            # Only add if line2 not already in file
+            if line2 not in existing_lines:
+                new_lines.extend([line1, line2, line3])
+                existing_lines.extend([line1, line2, line3])  # so duplicates are prevented in this run
+
+        # Write back everything
+        with open(dist_file_path, "w", encoding="utf-8") as f:
+            f.writelines(existing_lines)
 
 # ===== Create Item Definition =====
     def process_value(val, inc_var, dec_var):
@@ -908,27 +1253,47 @@ def create_food_item():
         f"    ItemType = base:{itemtype},",
             ]
     
-    if hunger_active.get():
-        item_block_lines.append(f"    HungerChange = {process_value(hunger, hunger_inc, hunger_dec)},")
-    if thirst_active.get():
-        item_block_lines.append(f"    ThirstChange = {process_value(thirst, thirst_inc, thirst_dec)},")
-    if unhappy_active.get():
-        item_block_lines.append(f"    UnhappyChange = {process_value(unhappy, unhappy_inc, unhappy_dec)},")
-    if stress_active.get():
-        item_block_lines.append(f"    StressChange = {process_value(stress, stress_inc, stress_dec)},")
-    if boredom_active.get():
-        item_block_lines.append(f"    BoredomChange = {process_value(boredom, boredom_inc, boredom_dec)},")  
-    if fatigue_active.get():
-        item_block_lines.append(f"    FatigueChange = {process_value(fatigue, fatigue_inc, fatigue_dec)},",)
-    if endurance_active.get():
-        item_block_lines.append(f"    EnduranceChange = {process_value(endurance, endurance_inc, endurance_dec)},")
+    if hunger_choice.get() == "Increase":
+        item_block_lines.append(f"    HungerChange = {hunger},")
+    elif hunger_choice.get() == "Decrease":
+        item_block_lines.append(f"    HungerChange = -{hunger},")
+        
+    if thirst_choice.get() == "Increase":
+        item_block_lines.append(f"    ThirstChange = {thirst},")
+    elif thirst_choice.get() == "Decrease":
+        item_block_lines.append(f"    ThirstChange = -{thirst},")
+
+    if unhappy_choice.get() == "Increase":
+        item_block_lines.append(f"    UnhappyChange = {unhappy},")
+    elif unhappy_choice.get() == "Decrease":
+        item_block_lines.append(f"    UnhappyChange = -{unhappy},")
+
+    if stress_choice.get() == "Increase":
+        item_block_lines.append(f"    StressChange = {stress},")
+    elif stress_choice.get() == "Decrease":
+        item_block_lines.append(f"    StressChange = -{stress},")   
+
+    if boredom_choice.get() == "Increase":
+        item_block_lines.append(f"    BoredomChange = {boredom},")
+    elif boredom_choice.get() == "Decrease":
+        item_block_lines.append(f"    BoredomChange = -{boredom},")
+
+    if fatigue_choice.get() == "Increase":
+        item_block_lines.append(f"    FatigueChange = {fatigue},")
+    elif fatigue_choice.get() == "Decrease":
+        item_block_lines.append(f"    FatigueChange = -{fatigue},")
+
+    if endurance_choice.get() == "Increase":
+        item_block_lines.append(f"    EnduranceChange = {endurance},")
+    elif endurance_choice.get() == "Decrease":
+        item_block_lines.append(f"    EnduranceChange = -{endurance},")
+        
     if nutrition_active.get():
-        item_block_lines.append(f"    Carbs = {carbs},")
+        item_block_lines.append(f"    Carbohydrates = {carbs},")
         item_block_lines.append(f"    Proteins = {proteins},")
         item_block_lines.append(f"    Lipids = {lipids},")
         item_block_lines.append(f"    Calories = {calories},")
 
-    
     if foodtype_active.get():
         item_block_lines.append(f"    FoodType = {foodtype},",)
     if eattype_active.get():
@@ -937,7 +1302,6 @@ def create_food_item():
         item_block_lines.append(f"    CookingSound = {cookingsound},")
     if customsound:
         item_block_lines.append(f"    CustomEatSound = {customsound},")
-    
     if herbalisttype:
         item_block_lines.append(f"    HerbalistType = {herbalisttype},")
 
@@ -980,8 +1344,6 @@ def create_food_item():
         item_block_lines.append(f"    MinutesToCook = {cook_minutes},")
         item_block_lines.append(f"    MinutesToBurn = {burn_minutes},")
         item_block_lines.append(f"    ReplaceOnCooked = {entry_replace_cooked.get().strip() if replace_cooked_var.get() else 'nil'},")
-    else:
-        item_block_lines.append(f"    IsCookable = false,")
 
     if replace_use_var.get() and entry_replace_use.get().strip():
         item_block_lines.append(f"    ReplaceOnUse = {entry_replace_use.get().strip()},")
@@ -1024,82 +1386,77 @@ def create_food_item():
             with open(path, "w", encoding="utf-8") as f:
                 f.write(content)
 
+# ===== Update Status =====
+    status_label.config(text=f"Item Created: {item_name}", fg="#00ff00")
 
-    entries_to_clear = [entry_item, entry_ingame, entry_asset, entry_weight,
-                        entry_hunger, entry_thirst, entry_unhappy, entry_herbalisttype, 
-                        entry_carbs, entry_proteins, entry_lipids, entry_calories, entry_tags, entry_tooltip, entry_usedelta, entry_oneat, entry_customcontextmenu,
-                        entry_stress, entry_boredom, entry_fatigue, entry_endurance,
-                        entry_foodtype, entry_eattype, entry_cookingsound, entry_eatingsound,
-                        entry_flu, entry_pain, entry_food_sick, entry_infection,
-                        entry_days_fresh, entry_days_rotten, entry_eatingsound, evolved_name_entry,
-                        entry_replace, entry_poisonpower, minutes_to_cook_entry, minutes_to_burn_entry, entry_flu, entry_pain, entry_stress, entry_boredom, entry_fatigue, entry_endurance,
-                        entry_food_sick, entry_infection]
-    for e in entries_to_clear: 
+# ===== Clear All Entries =====
+def clear_all_entries():
+    # ----- Clear all text entries -----
+    entries_to_clear = [
+        entry_asset, entry_item, entry_ingame, entry_weight,
+        entry_category, entry_itemtype, entry_foodtype, entry_eattype,
+        entry_cookingsound, entry_eatingsound, entry_herbalisttype,
+        entry_carbs, entry_proteins, entry_lipids, entry_calories,
+        entry_days_fresh, entry_days_rotten,
+        entry_poisonpower, entry_usedelta,
+        entry_replace_cooked, entry_replace, entry_replace_use,
+        entry_tags, entry_tooltip, entry_oneat, entry_customcontextmenu,
+        evolved_name_entry, entry_flu, entry_pain, entry_food_sick, entry_infection,
+        entry_hunger, entry_thirst, entry_unhappy, entry_stress, entry_boredom, entry_fatigue, entry_endurance,
+        minutes_to_burn_entry, minutes_to_cook_entry, entry_asset, entry_spawning_chance, entry_distribution_lists
+    ]
+    for e in entries_to_clear:
+        e.config(state="normal")
         e.delete(0, tk.END)
+        # Disable back if they were supposed to be inactive
+        if e in [entry_foodtype, entry_spawning_chance, entry_distribution_lists, entry_eattype, entry_cookingsound, entry_eatingsound,
+                 entry_herbalisttype, entry_carbs, entry_proteins, entry_lipids,
+                 entry_calories, entry_days_fresh, entry_days_rotten,
+                 entry_poisonpower, entry_usedelta, entry_replace_cooked,
+                 entry_replace, entry_replace_use, entry_tags, entry_tooltip,
+                 entry_oneat, entry_customcontextmenu, evolved_name_entry, minutes_to_burn_entry,
+                 minutes_to_cook_entry, entry_flu, entry_pain, entry_food_sick, entry_infection, entry_hunger, entry_thirst, entry_unhappy, entry_stress, entry_boredom, entry_fatigue, entry_endurance]:
+            e.config(state="disabled")
 
-# Reset all checkboxes and variables
-    hunger_inc.set(True); hunger_dec.set(False)
-    thirst_inc.set(True); thirst_dec.set(False)
-    unhappy_inc.set(True); unhappy_dec.set(False)
-    stress_inc.set(True); stress_dec.set(False)
-    boredom_inc.set(True); boredom_dec.set(False)
-    fatigue_inc.set(True); fatigue_dec.set(False)
-    eatingsound_active.set(False)
-    perishable_var.set(False)
-    replace_var.set(False)
-    tags_var.set(False)
-    tooltip_var.set(False)
-    evolved_var.set(False)
-    herbalisttype_active.set(False)
-    oneat_var.set(False)
-    customcontextmenu_var.set(False)
-    usedelta_active.set(False)
-    sweet_var.set(False)
-    salty_var.set(False)
-    cantbefrozen_var.set(False)
-    spice_var.set(False)
-    packaged_var.set(False)
-    poisonpower_active.set(False)
-    iscookable_var.set(False)
-    fishing_var.set(False)
-    dangerous_raw_var.set(False)
-    badcold_var.set(False)
-    badmicrowave_var.set(False)
-    goodhot_var.set(False)
-    canteat_var.set(False)
-    alcoholic_var.set(False)
-    medical_var.set(False)
-    remove_unhappy_cooked_var.set(False)
-    remove_negative_effects_cooked_var.set(False)
-    cannedfood_var.set(False)
-    flu_active.set(False)
-    pain_active.set(False)
-    food_sick_active.set(False)
-    infection_active.set(False)
-    foodtype_active.set(False)
-    eattype_active.set(False)
-    cookingsound_active.set(False)
-    hunger_active.set(False)
-    thirst_active.set(False)  
-    unhappy_active.set(False)
-    stress_active.set(False)
-    boredom_active.set(False)
-    fatigue_active.set(False)
-    endurance_active.set(False)
-    nutrition_active.set(False)
+    # ----- Reset all BooleanVars -----
+    for var in [
+        perishable_var, replace_var, tags_var, tooltip_var, oneat_var,
+        customcontextmenu_var, iscookable_var, sweet_var, salty_var,
+        nutrition_active, foodtype_active, eattype_active,
+        cookingsound_active, eatingsound_active, flu_active,
+        pain_active, food_sick_active, infection_active,
+        poisonpower_active, usedelta_active, replace_cooked_var,
+        evolved_var, canteat_var, cantbefrozen_var, spice_var, packaged_var,
+        cannedfood_var, badcold_var, badmicrowave_var, goodhot_var,
+        dangerous_raw_var, fishing_var, alcoholic_var, medical_var,
+        remove_unhappy_cooked_var, remove_negative_effects_cooked_var, replace_use_var, herbalisttype_active, distribution_var
+    ]:
+        var.set(False)
 
+    # ----- Reset all toggle buttons visually -----
+    for btn in toggle_buttons:
+        btn.var.set(False)
+        btn.config(bg=INACTIVE_BG, relief="raised")
 
-    for cb in evolved_cbs_buttons:
-        cb.var.set(False)
-        cb.config(bg=INACTIVE_BG, relief="raised")
+    # ----- Reset evolved recipe buttons -----
+    for btn in evolved_cbs_buttons:
+        btn.var.set(False)
+        btn.config(bg=INACTIVE_BG, relief="raised", state="disabled")
 
+    # ----- Reset dropdowns -----
+    for choice in [hunger_choice, thirst_choice, unhappy_choice, stress_choice,
+                   boredom_choice, fatigue_choice, endurance_choice]:
+        choice.set("Inactive")
 
-# ==== Update Status =====
-    status_label.config(text=f"Food Item Created: {item_name}", fg="#00ff00")
+    # ----- Clear status label -----
+    status_label.config(text="", fg="#00ff00")
 
 # ===== Create Item Button =====
 tk.Button(buttons_frame, text="Create Item", font=("Segoe UI", 12, "bold"),
           width=15, command=create_food_item).pack(pady=0)
+
+tk.Button(buttons_frame, text="Clear All", font=("Segoe UI", 12, "bold"),
+          width=15, command=clear_all_entries).pack(pady=0)
 
 # ===== Start Main Loop =====
 root.mainloop()
